@@ -1,103 +1,138 @@
-import Image from "next/image";
+"use client"
+import React, { useState } from "react";
+
+interface RepoData {
+  name: string;
+  full_name: string;
+  description: string;
+  stargazers_count: number;
+  forks_count: number;
+  open_issues_count: number;
+  owner: { login: string; avatar_url: string };
+}
+
+interface Contributor {
+  login: string;
+  avatar_url: string;
+  contributions: number;
+}
+
+interface Commit {
+  sha: string;
+  commit: { author: { date: string; name: string }; message: string };
+  author: { login: string; avatar_url: string } | null;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [repoUrl, setRepoUrl] = useState("https://github.com/vercel/vercel");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [repoData, setRepoData] = useState<RepoData | null>(null);
+  const [contributors, setContributors] = useState<Contributor[]>([]);
+  const [commits, setCommits] = useState<Commit[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Derived metric: commits per week
+  function getCommitsPerWeek(commits: Commit[]) {
+    const weekMap: Record<string, number> = {};
+    commits.forEach((c) => {
+      const week = c.commit.author.date.slice(0, 10); // YYYY-MM-DD
+      weekMap[week] = (weekMap[week] || 0) + 1;
+    });
+    console.log(weekMap)  
+    return weekMap;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setRepoData(null);
+    setContributors([]);
+    setCommits([]);
+    try {
+      const res = await fetch("/api/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unknown error");
+      setRepoData(data.repoData);
+      setContributors(data.contributors);
+      setCommits(data.commits);
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 700, margin: "2rem auto", padding: 24, fontFamily: "sans-serif" }}>
+      <h1>GitHub Repository Insights</h1>
+      <form onSubmit={handleSubmit} style={{ marginBottom: 24 }}>
+        <input
+          type="text"
+          value={repoUrl}
+          onChange={e => setRepoUrl(e.target.value)}
+          placeholder="Enter GitHub repo URL (e.g. https://github.com/vercel/next.js)"
+          style={{ width: 400, padding: 8, marginRight: 8 }}
+          required
+        />
+        <button type="submit" disabled={loading} style={{ padding: "8px 16px" }}>
+          {loading ? "Loading..." : "Fetch Insights"}
+        </button>
+      </form>
+      {error && <div style={{ color: "red", marginBottom: 16 }}>{error}</div>}
+      {repoData && (
+        <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 16, marginBottom: 24 }}>
+          <h2>{repoData.full_name}</h2>
+          <p>{repoData.description}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <img src={repoData.owner.avatar_url} alt="Owner avatar" width={48} height={48} style={{ borderRadius: "50%" }} />
+            <div>
+              <strong>Owner:</strong> {repoData.owner.login}
+            </div>
+            <div>⭐ Stars: {repoData.stargazers_count}</div>
+            <div>🍴 Forks: {repoData.forks_count}</div>
+            <div>🐞 Open Issues: {repoData.open_issues_count}</div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
+      {contributors.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <h3>Top Contributors</h3>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {contributors.map(c => (
+              <div key={c.login} style={{ border: "1px solid #eee", borderRadius: 8, padding: 8, minWidth: 120, textAlign: "center" }}>
+                <img src={c.avatar_url} alt={c.login} width={32} height={32} style={{ borderRadius: "50%" }} />
+                <div>{c.login}</div>
+                <div style={{ fontSize: 12, color: "#555" }}>{c.contributions} commits</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {commits.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <h3>Recent Commits</h3>
+          <ul style={{ maxHeight: 200, overflow: "auto", paddingLeft: 16 }}>
+            {commits.slice(0, 10).map(c => (
+              <li key={c.sha} style={{ marginBottom: 8 }}>
+                <strong>{c.commit.author.name}</strong>: {c.commit.message.slice(0, 60)}
+                <div style={{ fontSize: 12, color: "#555" }}>{new Date(c.commit.author.date).toLocaleString()}</div>
+              </li>
+            ))}
+          </ul>
+          <h4>Commit Frequency (per day)</h4>
+          <ul>
+            {Object.entries(getCommitsPerWeek(commits)).map(([date, count]) => (
+              <li key={date}>{date}: {count} commits</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
+
